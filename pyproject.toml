@@ -2,6 +2,28 @@
 requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "minion"
+version = "0.1.1"
+description = "Minimal self evolving agent using Sentdex minion as base."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "openai",
+    "httpx<0.28",
+]
+
+[project.scripts]
+minion = "minion:main"
+
+[tool.setuptools]
+py-modules = ["minion"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
