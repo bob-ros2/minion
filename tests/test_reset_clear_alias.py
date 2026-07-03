@@ -57,30 +57,28 @@ def run_with(cmd):
     return captured.getvalue()
 
 
-out_reset = run_with("/reset")
-out_clear = run_with("/clear")
-out_new = run_with("/new")
+def test_reset_clear_new_aliases():
+    out_reset = run_with("/reset")
+    out_clear = run_with("/clear")
+    out_new = run_with("/new")
 
-# --- assertions --------------------------------------------------------------
-for label, out in (("/reset", out_reset), ("/clear", out_clear), ("/new", out_new)):
-    assert "context cleared" in out, \
-        f"{label} should have cleared context, got:\n{out}"
-    assert "new session" in out, \
-        f"{label} should have forked a new session id, got:\n{out}"
+    # --- assertions --------------------------------------------------------------
+    for label, out in (("/reset", out_reset), ("/clear", out_clear), ("/new", out_new)):
+        assert "context cleared" in out, \
+            f"{label} should have cleared context, got:\n{out}"
+        assert "new session" in out, \
+            f"{label} should have forked a new session id, got:\n{out}"
 
-# The three commands take the same code path, so their output should match
-# exactly (the new session id is non-deterministic, so strip those lines).
-def strip_session_id(out):
-    return "\n".join(
-        line for line in out.splitlines()
-        if "new session" not in line
-    )
+    # The three commands take the same code path, so their output should match
+    # exactly (the new session id is non-deterministic, so strip those lines).
+    def strip_session_id(out):
+        return "\n".join(
+            line for line in out.splitlines()
+            if "new session" not in line
+        )
 
-
-baseline = strip_session_id(out_reset)
-for label, out in (("/clear", out_clear), ("/new", out_new)):
-    assert strip_session_id(out) == baseline, \
-        f"{label} should behave identically to /reset:\n" \
-        f"--- /reset ---\n{out_reset}\n--- {label} ---\n{out}"
-
-print("OK — /clear and /new are aliases for /reset")
+    baseline = strip_session_id(out_reset)
+    for label, out in (("/clear", out_clear), ("/new", out_new)):
+        assert strip_session_id(out) == baseline, \
+            f"{label} should behave identically to /reset:\n" \
+            f"--- /reset ---\n{out_reset}\n--- {label} ---\n{out}"
