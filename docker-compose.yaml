@@ -1,0 +1,32 @@
+services:
+  minion:
+    build: .
+    container_name: minion
+    restart: unless-stopped
+    volumes:
+      # Mount the host's project directory (where minion.py lives) to /app,
+      # overriding the image's copy — so code edits by the agent persist.
+      - .:/app
+      # Mount ~/.minion/ directly (bind mount) so the agent's sessions,
+      # skills, evolve data, and limbus live on the host filesystem.
+      - ~/.minion:/root/.minion
+    environment:
+      # --- Model endpoint (override in .env or shell) ---
+      # Your self-hosted OpenAI-compatible API (llama.cpp, vLLM, SGLang, …)
+      MINION_BASE_URL: "http://192.168.1.9:8022/v1"
+      MINION_MODEL: ""
+      MINION_API_KEY: "sk-noop"
+      # --- Agent behaviour ---
+      MINION_APPROVAL: "yolo"
+      MINION_HOME: "/root/.minion"
+      # --- Evolution environment ---
+      EVOLVE_DIR: "/root/.minion/evolve"
+      EVOLVE_RESULT_FILE: "/root/.minion/evolve/result.txt"
+      EVOLVE_PROMPT_FILE: "/root/.minion/evolve/prompt.txt"
+      EVOLVE_LOCK_FILE: "/root/.minion/evolve/lock"
+      LIMBUS_FILE: "/root/.minion/evolve/limbus.md"
+      # The workspace is /app — the agent edits its own codebase there
+      WORKSPACE: "/app"
+      # Cron schedule — every N minutes. Use */30 for production.
+      CRON_SCHEDULE: "*/3 * * * *"
+    working_dir: /app

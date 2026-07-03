@@ -1,0 +1,81 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Environments & Secrets ---
+.env
+.env.*
+!.env.example
+sources.env
+*.local
+
+# --- Virtual Environments ---
+.venv/
+venv/
+ENV/
+env/
+/env/
+/venv/
+/ENV/
+/env.bak/
+/venv.bak/
+
+# --- IDEs / Editors ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
+
+# --- Testing & Coverage ---
+.htmlcov/
+.tox/
+.nosenvy/
+.noscript/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+.pytest/
+
+# --- Docker & Logs ---
+*.log
+logs/
+.docker/
+
+# --- OS Specific ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
