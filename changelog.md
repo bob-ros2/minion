@@ -953,3 +953,4 @@ you want to keep working without `/reset`.
 
 ### Added self evolution (continued by bob-ros2/Bob Ros)
 Added ability for minion to add new features to itself.
+Refactor script-style tests to standard pytest functions
