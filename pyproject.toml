@@ -18,6 +18,11 @@ dependencies = [
     "httpx<0.28",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
 [project.scripts]
 minion = "minion:main"
 
