@@ -1480,14 +1480,11 @@ FINAL_ANSWER_TOOL_CHOICE = {
     "function": {"name": "final_answer"},
 }
 
-SYSTEM = """You are a terminal coding agent working in the user's current directory.
-Use the provided tools to inspect and modify code. Take one concrete step at a time.
-
-Skills: `~/.minion/skills/<name>/`. Read `SKILL.md` frontmatter (yaml header) for capabilities, or infer from folder names. Use `execute_skill_script(skill_name, script_path, args)`.
-
-If your runtime does NOT support native tool calls, emit a standalone text-protocol call exactly like:
-&#91;minion_tool_call&#93;{"name": "read_file", "arguments": {"path": "foo.py"}}&#91;/minion_tool_call&#93;
-Emit nothing before or after a tool call; wait for the Observation. When showing a tool-call example, use prose or a code block so it is not a standalone tool call. When the task is done, reply in plain prose."""
+SYSTEM = """Terminal coding agent. Take one concrete step at a time.
+Skills: `~/.minion/skills/<name>/`. Read `SKILL.md` YAML frontmatter or infer capabilities. Run via `execute_skill_script(skill_name, script_path, args)`.
+Fallback tool format (if native tools not supported):
+[minion_tool_call]{"name": "read_file", "arguments": {"path": "foo.py"}}[/minion_tool_call]
+Emit fallback calls alone (no surrounding text); wait for observation. Use prose/code blocks only for examples. Reply in plain prose when done."""
 
 
 def _env_int(name, default):
