@@ -955,4 +955,4 @@ you want to keep working without `/reset`.
 - Added self evolution
 - Added ability for minion to add new features to itself.
 - Refactor script-style tests to standard pytest functions
-- Internationalization german into english, crunch down system prompt 784 tokens
+- Internationalization german into english, crunch down system prompt to 784 tokens
