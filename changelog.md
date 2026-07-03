@@ -956,3 +956,7 @@ you want to keep working without `/reset`.
 - Added ability for minion to add new features to itself.
 - Refactor script-style tests to standard pytest functions
 - Internationalization german into english, crunch down system prompt to 784 tokens
+- Optimize self-evolution prompt by extracting last assistant response from active session files
+- Add container-internal `chat_minion.sh` to pause cronjob and resume latest interactive chat session
+- Compact evolution limbus rules to minimize token usage and steer focus
+- Update code reviewer skill with AST-based bare except detection

@@ -3,16 +3,10 @@
 
 `_precise_abbr` keeps two decimals across K/M/B; the B branch used to floor to
 an integer ("1B"), so the two-decimal case there is pinned below.
+
+Uses shared fixtures from ``conftest.py`` for temp-dir setup.
 """
-import os
-import sys
-import tempfile
 
-_tmp = tempfile.mkdtemp(prefix="minion-abbr-")
-os.environ["MINION_SESSIONS_DIR"] = _tmp
-os.environ["MINION_HOME"] = _tmp
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import minion as m  # noqa: E402
 
 
@@ -29,9 +23,13 @@ def test_precise_abbr_keeps_two_decimals():
     assert m._precise_abbr(1234567) == "1.23M"
 
 
-def test_precise_abbr_billions_two_decimals():
-    # The docstring promises two decimals in the B range too; guard against the
-    # old integer-floor formatting that rendered 1.5e9 as "1B".
+def test_precise_abbr_billions_two_decimals(tmp_minion):
+    """The B branch used to floor to an integer ("1B").
+
+    The ``tmp_minion`` fixture ensures a clean temp dir / env state, even
+    though ``_precise_abbr`` itself is a pure function and doesn't touch the
+    filesystem.
+    """
     assert m._precise_abbr(1_500_000_000) == "1.50B"
     assert m._precise_abbr(2_000_000_000) == "2.00B"
 
@@ -39,4 +37,5 @@ def test_precise_abbr_billions_two_decimals():
 if __name__ == "__main__":
     import pytest
 
+    import sys
     sys.exit(pytest.main([__file__, "-v"]))

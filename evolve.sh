@@ -58,10 +58,40 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Read last result ---
+# --- Read last assistant response from the newest session file ---
 LAST_RESULT=""
-if [ -f "$RESULT_FILE" ]; then
-    LAST_RESULT=$(tail -c 50000 "$RESULT_FILE" 2>/dev/null || true)
+NEWEST_SESSION=""
+EXTRACTED_CONTENT=""
+
+# Extract the newest session that has an assistant response, and get that response
+eval "$(python3 -c "
+import os, glob, json, shlex
+sessions = sorted(glob.glob('/root/.minion/sessions/*.json'), key=os.path.getmtime, reverse=True)
+newest_session = ''
+last_result = ''
+for s in sessions:
+    try:
+        with open(s) as f:
+            data = json.load(f)
+            messages = data.get('messages', [])
+            for msg in reversed(messages):
+                if msg.get('role') == 'assistant':
+                    last_result = msg.get('content', '')
+                    newest_session = s
+                    break
+    except Exception:
+        pass
+    if newest_session:
+        break
+print(f'NEWEST_SESSION={shlex.quote(newest_session)}')
+print(f'EXTRACTED_CONTENT={shlex.quote(last_result)}')
+" 2>/dev/null || true)"
+
+if [ -n "$NEWEST_SESSION" ] && [ -f "$NEWEST_SESSION" ]; then
+    SESSION_NAME=$(basename "$NEWEST_SESSION")
+    if [ -n "$EXTRACTED_CONTENT" ]; then
+        LAST_RESULT="### Session Source: $SESSION_NAME"$'\n\n'"$EXTRACTED_CONTENT"
+    fi
 fi
 
 # --- Build the evolution prompt ---
@@ -94,6 +124,7 @@ Write your final answer in the same language the user is asking and keep it
 concise but meaningful. Conclude with a single-line "NEXT_STEP: <what you intend to do next>".
 PROMPT
 
+
 echo "[evolve] running minion one-shot..."
 
 # The Limbus (core philosophy) is loaded as --prelude.
@@ -109,13 +140,13 @@ fi
 cd "${WORKSPACE:-/app}"
 ERROR_LOG="$EVOLVE_DIR/error.log"
 
-# Use a temp file to capture stdout (avoids PIPESTATUS issues with process substitution)
-# Note: We do NOT use '|| true' here — we want to capture the real exit code
+# Temporarily disable errexit so we can capture the real exit code
+# without the script aborting on a non-zero return from minion
+set +e
 python3 "$MINION_PY" --prompt-file "$PROMPT_FILE" --yolo $LIMBUS_ARGS \
-    > /tmp/minion_evolve_out.tmp 2>"$ERROR_LOG" || true
-EXIT_CODE=${PIPESTATUS[0]:-$?}
-# Fallback: if PIPESTATUS is empty (bash), use $?
-[ -z "$EXIT_CODE" ] && EXIT_CODE=$?
+    > /tmp/minion_evolve_out.tmp 2>"$ERROR_LOG"
+EXIT_CODE=$?
+set -e
 
 # Truncate result to 200K chars, preserving the exit code
 head -c 200000 /tmp/minion_evolve_out.tmp > "$RESULT_FILE"
