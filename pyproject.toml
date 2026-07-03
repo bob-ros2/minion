@@ -1,3 +1,18 @@
 [build-system]
 requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "tools: tests for tool implementations (mkdir, read_file, etc.)",
+    "commands: tests for slash commands (/compact, /compress, /reset, etc.)",
+    "sources: tests for source resolution, context windows, etc.",
+    "integration: end-to-end integration tests",
+    "network: tests that involve network calls or mocking",
+    "unit: simple unit tests",
+]

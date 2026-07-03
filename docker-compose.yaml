@@ -1,12 +1,15 @@
 services:
   minion:
     build: .
+    image: ghcr.io/bob-ros2/bob-minion:latest
     container_name: minion
     restart: unless-stopped
     volumes:
       # Mount the host's project directory (where minion.py lives) to /app,
       # overriding the image's copy — so code edits by the agent persist.
       - .:/app
+      # Mount minion.py explicitly as read-only to prevent the agent from self-mutating its core
+      - ./minion.py:/app/minion.py:ro
       # Mount ~/.minion/ directly (bind mount) so the agent's sessions,
       # skills, evolve data, and limbus live on the host filesystem.
       - ~/.minion:/root/.minion

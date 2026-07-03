@@ -19,6 +19,8 @@ import sys
 import urllib.error
 import urllib.request
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Scrub env so _discover_sources builds a clean single 'local' source.
@@ -90,6 +92,8 @@ def _make_source(models_page=None, chat=None):
     return src
 
 
+@pytest.mark.sources
+@pytest.mark.network
 def test_llama_cpp_n_ctx_from_models_meta():
     page = _FakeModelsPage([_FakeModel("test-model", {"meta": {"n_ctx": 131072}})])
     src = _make_source(models_page=page, chat=_FakeChat(_FakeChatCompletions()))
@@ -97,6 +101,8 @@ def test_llama_cpp_n_ctx_from_models_meta():
     assert n == 131072, f"expected 131072 from meta.n_ctx, got {n}"
 
 
+@pytest.mark.sources
+@pytest.mark.network
 def test_props_fallback():
     props = {"default_generation_settings": {"n_ctx": 65536},
              "model_alias": "test-model"}
@@ -129,6 +135,8 @@ def test_props_fallback():
         urllib.request.urlopen = orig_urlopen
 
 
+@pytest.mark.sources
+@pytest.mark.network
 def test_together_over_max_tokens_probe():
     orig_urlopen = urllib.request.urlopen
     def _props_refused(url, timeout=None):
@@ -148,6 +156,8 @@ def test_together_over_max_tokens_probe():
         urllib.request.urlopen = orig_urlopen
 
 
+@pytest.mark.sources
+@pytest.mark.unit
 def test_caching_and_force_reprobes():
     err_msg = ("Error code: 400 - " + json.dumps({
         "error": {"message": "This model's maximum context length is 262144 tokens, "
@@ -173,6 +183,8 @@ def test_caching_and_force_reprobes():
     assert n3 == 262144 and probe_calls[0] == 2, "force should re-probe"
 
 
+@pytest.mark.sources
+@pytest.mark.network
 def test_total_miss_returns_none():
     orig_urlopen = urllib.request.urlopen
     class _NoInfoChat(_FakeChatCompletions):
@@ -191,6 +203,8 @@ def test_total_miss_returns_none():
         urllib.request.urlopen = orig_urlopen
 
 
+@pytest.mark.sources
+@pytest.mark.network
 def test_remote_source_tries_over_max_tokens_before_v1_models():
     _remote_models_calls = [0]
 
@@ -215,6 +229,8 @@ def test_remote_source_tries_over_max_tokens_before_v1_models():
         "remote must not hit /v1/models when the overrun probe succeeds"
 
 
+@pytest.mark.sources
+@pytest.mark.unit
 def test_is_local_host_classification():
     _local = m.Source("local", "http://localhost:8080/v1", "sk-noop")
     _lan = m.Source("lan", "http://192.168.1.50:8080/v1", "sk-noop")
@@ -226,6 +242,8 @@ def test_is_local_host_classification():
     assert not _remote2._is_local(), "api.z.ai should be remote"
 
 
+@pytest.mark.sources
+@pytest.mark.integration
 def test_switch_source_invalidates_cached_window():
     global m
     saved_env = dict(os.environ)
@@ -254,6 +272,8 @@ def test_switch_source_invalidates_cached_window():
         importlib.reload(m)
 
 
+@pytest.mark.sources
+@pytest.mark.unit
 def test_ctx_field_colorization_by_utilization():
     orig_urlopen = urllib.request.urlopen
     _ANSI = re.compile(r"\x1b\[[0-9;]*m")

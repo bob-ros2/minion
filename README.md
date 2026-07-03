@@ -1,5 +1,8 @@
 # minion
 
+[![Docker Build AMD64](https://github.com/bob-ros2/minion/actions/workflows/docker-build-amd64.yml/badge.svg)](https://github.com/bob-ros2/minion/actions/workflows/docker-build-amd64.yml)
+[![Docker Build ARM64](https://github.com/bob-ros2/minion/actions/workflows/docker-build-arm64.yml/badge.svg)](https://github.com/bob-ros2/minion/actions/workflows/docker-build-arm64.yml)
+
 A no-nonsense coding agent that doesn't use 50K tokens of context to say "hello."
 
 Minion is a purpose built coding agent aimed at removing and keeping out context bloat. Many agent frameworks use 20K-50K+ tokens when you've just said "hey." This is caused by having a lot of features and tools that need to be loaded into the context of the LLM.
@@ -11,21 +14,21 @@ Why do we care about this context?
 2. That first 50K of context is where your model's attention mechanism is likely the best. We want that intelligence.
 3. That first 50K of context riding along every singe message you send adds to cost over time, even if you're on some API.
 
-On a bare `hey`, the entire prompt minion sends is about 625 tokens:
+On a bare `hey`, the entire prompt minion sends is about 834 tokens:
 
 ```
-  system prompt (SYSTEM)               ~98
-  tool schemas (5 functions, TOOLS)   ~475
-  the word "hey"                         1
+  system prompt (SYSTEM)              ~120
+  tool schemas (6 functions, TOOLS)   ~663
+  the word "hey"                        1
   chat-template framing                ~50
                                      ─────
-                                     ~625 tokens
+                                     ~834 tokens
 ```
 
 The variance is in the last line: every server's chat template wraps
 the tool section differently (Qwen/Hermes add per-tool tags, llama.cpp
 adds a functions header, OpenAI injects its own), so the real total
-lands somewhere in the low 600s. The point is the floor — not the
+lands somewhere in the low 800s. The point is the floor — not the
 exact figure. That's two orders of magnitude less than the harnesses
 that spend the first 20K–50K of your context before you've said
 anything, and it's paid on every single turn.

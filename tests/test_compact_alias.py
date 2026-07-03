@@ -5,10 +5,11 @@ the network calls so compress() returns a known value, and assert both
 commands produce identical output (modulo the command string itself).
 """
 import io
-import sys
-import importlib
 import os
+import sys
 import tempfile
+
+import pytest
 
 _tmp = tempfile.mkdtemp(prefix="minion-test-")
 os.environ["MINION_SESSIONS_DIR"] = _tmp
@@ -69,6 +70,8 @@ def run_with(cmd):
     return captured.getvalue()
 
 
+@pytest.mark.commands
+@pytest.mark.integration
 def test_compact_compress_aliases():
     out_compact = run_with("/compact")
     out_compress = run_with("/compress")
