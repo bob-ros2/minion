@@ -951,6 +951,8 @@ you want to keep working without `/reset`.
 - New `COMPRESS_KEEP = 2` module constant.
 - Banner and module docstring updated to mention `/compress`.
 
-### Added self evolution (continued by bob-ros2/Bob Ros)
-Added ability for minion to add new features to itself.
-Refactor script-style tests to standard pytest functions
+### Refactor (continued by bob-ros2/Bob Ros)
+- Added self evolution
+- Added ability for minion to add new features to itself.
+- Refactor script-style tests to standard pytest functions
+- Internationalization german into english, crunch down system prompt 784 tokens

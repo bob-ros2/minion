@@ -90,14 +90,14 @@ Keep your changes small and focused — one step per run. Quality over quantity.
 If you have no clear improvement to make, explore your own codebase to learn
 something new, or reflect on your architecture and document insights.
 
-Write your final answer in German (since your user speaks German) and keep it
-concise but meaningful. Conclude with a single-line "NÄCHSTER_SCHRITT: <what you intend to do next>".
+Write your final answer in the same language the user is asking and keep it
+concise but meaningful. Conclude with a single-line "NEXT_STEP: <what you intend to do next>".
 PROMPT
 
 echo "[evolve] running minion one-shot..."
 
-# Der Limbus (core philosophy) wird als --prelude geladen.
-# Wenn die Datei nicht existiert, wird einfach ohne weitergemacht.
+# The Limbus (core philosophy) is loaded as --prelude.
+# If the file doesn't exist, it simply proceeds without it.
 LIMBUS_FILE="${LIMBUS_FILE:-$EVOLVE_DIR/limbus.md}"
 LIMBUS_ARGS=""
 if [ -f "$LIMBUS_FILE" ]; then
