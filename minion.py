@@ -3519,6 +3519,7 @@ def _run_one_shot():
         assistant_contents = [
             m.get("content", "") for m in messages
             if m.get("role") == "assistant" and m.get("content")
+            and m.get("content") != "I have read and understood the Limbus. I am ready for the task."
         ]
         clean_result = "\n\n".join(assistant_contents).strip()
         try:
