@@ -12,24 +12,32 @@ services:
       - ./minion.py:/app/minion.py:ro
       # Mount ~/.minion/ directly (bind mount) so the agent's sessions,
       # skills, evolve data, and limbus live on the host filesystem.
-      - ~/.minion:/root/.minion
+      - ~/.minion:/home/minion/.minion
     environment:
+      # --- User permissions (PUID=0 for root, default: 1000 for minion user) ---
+      PUID: 1000
+      PGID: 1000
       # --- Model endpoint (override in .env or shell) ---
       # Your self-hosted OpenAI-compatible API (llama.cpp, vLLM, SGLang, …)
       MINION_BASE_URL: "http://192.168.1.9:8022/v1"
       MINION_MODEL: ""
       MINION_API_KEY: "sk-noop"
-      # --- Agent behaviour ---
+      # --- Agent behaviour & generation limits ---
       MINION_APPROVAL: "yolo"
-      MINION_HOME: "/root/.minion"
+      MINION_HOME: "/home/minion/.minion"
+      MINION_MAX_TOKENS: 3000
+      MINION_REASONING_ONLY_CHARS: 12000
+      # MINION_TEMPERATURE: "0.2"
+      # MINION_FREQUENCY_PENALTY: "0.3"
       # --- Evolution environment ---
-      EVOLVE_DIR: "/root/.minion/evolve"
-      EVOLVE_RESULT_FILE: "/root/.minion/evolve/result.txt"
-      EVOLVE_PROMPT_FILE: "/root/.minion/evolve/prompt.txt"
-      EVOLVE_LOCK_FILE: "/root/.minion/evolve/lock"
-      LIMBUS_FILE: "/root/.minion/evolve/limbus.md"
+      EVOLVE_DIR: "/home/minion/.minion/evolve"
+      EVOLVE_RESULT_FILE: "/home/minion/.minion/evolve/result.txt"
+      EVOLVE_PROMPT_FILE: "/home/minion/.minion/evolve/prompt.txt"
+      EVOLVE_LOCK_FILE: "/home/minion/.minion/evolve/lock"
+      LIMBUS_FILE: "/home/minion/.minion/evolve/limbus.md"
       # The workspace is /app — the agent edits its own codebase there
       WORKSPACE: "/app"
       # Cron schedule — every N minutes. Use */30 for production.
       CRON_SCHEDULE: "*/3 * * * *"
     working_dir: /app
+

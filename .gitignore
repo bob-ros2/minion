@@ -26,6 +26,7 @@ MANIFEST
 .env
 .env.*
 !.env.example
+!sources.example.env
 sources.env
 *.local
 

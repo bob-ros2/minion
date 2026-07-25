@@ -1,8 +1,9 @@
 FROM python:3-slim
 
-# Install cron and other useful tools
+# Install cron, gosu and other useful tools
 RUN apt-get update -qq && apt-get install -y -qq \
     cron \
+    gosu \
     procps \
     curl \
     git \
@@ -13,22 +14,25 @@ RUN apt-get update -qq && apt-get install -y -qq \
     vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
+# Create dedicated non-root user (default UID/GID 1000)
+RUN groupadd -g 1000 minion && \
+    useradd -u 1000 -g minion -m -s /bin/bash minion
+
 WORKDIR /app
 
-# Copy and install Python dependencies
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Copy project files and install Python dependencies + minion package
+COPY requirements.txt pyproject.toml README.md /app/
+COPY minion.py prepare_chat_session.py evolve.sh entrypoint.sh chat_minion.sh /app/
 
-# Ship a default minion.py in the image (will be overridden by
-# the host mount at runtime, but serves as fallback)
-COPY minion.py /app/minion.py
-COPY evolve.sh /app/evolve.sh
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/evolve.sh /app/entrypoint.sh
+RUN pip install --no-cache-dir -r /app/requirements.txt && \
+    pip install --no-cache-dir . && \
+    rm -rf /app/build /app/*.egg-info
 
-# Ensure cron log file exists
-RUN touch /var/log/evolve.log
+RUN chmod +x /app/evolve.sh /app/entrypoint.sh /app/chat_minion.sh
 
-# Default: start cron and keep container alive
+# Ensure cron log file exists and is writable
+RUN touch /var/log/evolve.log && chown minion:minion /var/log/evolve.log
+
+# Default: start entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 

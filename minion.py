@@ -1687,8 +1687,13 @@ def _precise_abbr(n):
         return f"{n / 1_000_000:.2f}M"
     return f"{n / 1_000_000_000:.2f}B"
 
-REASONING_ONLY_CHAR_LIMIT = _env_int("MINION_REASONING_ONLY_CHARS", 36000)
-MAX_COMPLETION_TOKENS = _env_int("MINION_MAX_TOKENS", 16000)
+REASONING_ONLY_CHAR_LIMIT = _env_int("MINION_REASONING_ONLY_CHARS", 12000)
+MAX_COMPLETION_TOKENS = _env_int("MINION_MAX_TOKENS", 3000)
+# Default API sampling options for standard completions.
+DEFAULT_TEMPERATURE = _env_float("MINION_TEMPERATURE", -1.0)
+DEFAULT_TOP_P = _env_float("MINION_TOP_P", -1.0)
+DEFAULT_FREQUENCY_PENALTY = _env_float("MINION_FREQUENCY_PENALTY", -1.0)
+DEFAULT_PRESENCE_PENALTY = _env_float("MINION_PRESENCE_PENALTY", -1.0)
 # Cap + dedup tool results before they enter the message history. Large,
 # near-duplicate tool outputs (find/ls/grep path dumps) are the fuel for the
 # context-copying repetition collapse some local models fall into — bounding
@@ -2089,32 +2094,68 @@ TOOL_RESULT_PROTOCOL_NOTE = (
 
 
 def parse_text_calls(content):
-    """Pull standalone text-protocol tool-call messages.
+    """Pull text-protocol tool-call messages (JSON or XML format).
 
-    Literal protocol tags can appear in files, docs, and code examples. Treat
-    them as executable only when the whole assistant message is protocol text.
+    Excludes content inside markdown code blocks (```...```) to avoid parsing examples.
+    Supports:
+    1. [minion_tool_call]{...}[/minion_tool_call] or <tool_call>{...}</tool_call> (JSON)
+    2. <tool_call><function=NAME><parameter=KEY>VAL</parameter>...</function></tool_call> (XML)
+    3. Standalone <function=NAME>...</function> (XML)
     """
-    text = content or ""
-    pos = 0
+    if not content or not isinstance(content, str):
+        return []
+
+    # Strip markdown code blocks to avoid executing code snippets/examples
+    clean_text = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
     calls = []
-    while pos < len(text):
-        while pos < len(text) and text[pos].isspace():
-            pos += 1
-        if pos >= len(text):
-            break
-        match = None
-        for tag in TOOL_TAGS:
-            match = tag.match(text, pos)
-            if match:
-                break
-        if not match:
-            return []
-        try:
-            obj = json.loads(match.group(1))
-            calls.append((obj["name"], obj.get("arguments", {})))
-        except (json.JSONDecodeError, KeyError):
-            return []
-        pos = match.end()
+
+    # 1. Search for JSON tool tags: [minion_tool_call]{...}[/minion_tool_call] or <tool_call>{...}</tool_call>
+    json_patterns = [
+        r"\[minion_tool_call\]\s*(\{.*?\})\s*\[/minion_tool_call\]",
+        r"<tool_call>\s*(\{.*?\})\s*</tool_call>"
+    ]
+    for pattern in json_patterns:
+        for match in re.finditer(pattern, clean_text, re.DOTALL):
+            raw_json = match.group(1).strip()
+            try:
+                obj = json.loads(raw_json)
+                if isinstance(obj, dict) and "name" in obj:
+                    calls.append((obj["name"], obj.get("arguments", {})))
+            except Exception:
+                pass
+
+    if calls:
+        return calls
+
+    # 2. Search for XML function calls (e.g., Qwen / Hermes format)
+    # Match <function=NAME>...</function> or <function name="NAME">...</function>
+    fn_pattern = r"<function[ =\"']+([a-zA-Z0-9_\-\.]+)[ \"'>]*>(.*?)</function>"
+    param_pattern = r"<parameter[ =\"']+([a-zA-Z0-9_\-\.]+)[ \"'>]*>(.*?)</parameter>"
+
+    for fn_match in re.finditer(fn_pattern, clean_text, re.DOTALL):
+        fn_name = fn_match.group(1).strip()
+        fn_body = fn_match.group(2)
+        args = {}
+        for p_match in re.finditer(param_pattern, fn_body, re.DOTALL):
+            p_name = p_match.group(1).strip()
+            p_val = p_match.group(2).strip()
+
+            parsed_val = p_val
+            # Try parsing JSON values (lists, dicts, numbers, booleans, strings)
+            if p_val.startswith(("[", "{", '"', "true", "false", "null")) or p_val.isdigit():
+                try:
+                    parsed_val = json.loads(p_val)
+                except Exception:
+                    # Fallback for single quotes or literal eval
+                    try:
+                        import ast
+                        parsed_val = ast.literal_eval(p_val)
+                    except Exception:
+                        parsed_val = p_val
+            args[p_name] = parsed_val
+
+        calls.append((fn_name, args))
+
     return calls
 
 
@@ -2273,6 +2314,15 @@ def open_stream(messages, tools=TOOLS, tool_choice=None, max_tokens=None,
             request_opts["max_tokens"] = token_limit
         if recovery_sampling:
             request_opts.update(_recovery_sampling_opts())
+        else:
+            if DEFAULT_TEMPERATURE >= 0:
+                request_opts["temperature"] = DEFAULT_TEMPERATURE
+            if DEFAULT_TOP_P >= 0:
+                request_opts["top_p"] = DEFAULT_TOP_P
+            if DEFAULT_FREQUENCY_PENALTY >= 0:
+                request_opts["frequency_penalty"] = DEFAULT_FREQUENCY_PENALTY
+            if DEFAULT_PRESENCE_PENALTY >= 0:
+                request_opts["presence_penalty"] = DEFAULT_PRESENCE_PENALTY
         if tool_choice is not None:
             request_opts["tool_choice"] = tool_choice
         try:
@@ -2638,6 +2688,7 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
     usage = None
     t_first = None   # time of first output token (for TTFT)
     loop_cut = False
+    reasoning_chunks = []
     reasoning_only_chars = 0
     stream_error = None
     interrupted = False
@@ -2713,6 +2764,7 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
             # run straight into the answer).
             rc = getattr(d, "reasoning_content", None) or (d.model_extra or {}).get("reasoning_content")
             if rc:
+                reasoning_chunks.append(rc)
                 if mode != "think":
                     print(f"{DIM}  ── reasoning ──{RESET}")
                     mode = "think"
@@ -2721,6 +2773,8 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
                     reasoning_only_chars += len(rc)
                 if (REASONING_ONLY_CHAR_LIMIT > 0 and not content and not tcs
                         and reasoning_only_chars >= REASONING_ONLY_CHAR_LIMIT):
+                    if parse_text_calls("".join(reasoning_chunks)):
+                        break
                     print()
                     print(f"{RED}  ⚠ REASONING-ONLY LIMIT HIT — "
                           f"{_abbr(reasoning_only_chars)} reasoning chars with no "
@@ -2829,8 +2883,13 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
             "Acknowledge briefly and wait for their next message.]"})
         return TURN_DONE
 
+    reasoning_text = "".join(reasoning_chunks)
+    full_response_text = (reasoning_text + "\n" + text) if reasoning_text else text
+    text_calls = parse_text_calls(full_response_text) if not tcs else []
+
     if not loop_cut and not text.strip() and not tcs and reasoning_only_chars > 0:
-        loop_cut = True
+        if not text_calls:
+            loop_cut = True
 
     if loop_cut:
         retry_limit = max(0, REASONING_ONLY_RETRY_LIMIT)
@@ -2887,7 +2946,7 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
             parts.append(f"{t_first*1000:4.0f}ms ttft")
         parts.append(f"{elapsed:4.1f}s wall")
         print(f"{DIM}  └ {' · '.join(parts)}{RESET}")
-    elif text or tcs:
+    elif text or tcs or text_calls:
         print(f"{DIM}  └ {elapsed:4.1f}s wall{RESET}")
 
     if forced_final and tcs:
@@ -2971,9 +3030,9 @@ def model_turn(messages, reasoning_loop_cut_count=0, malformed_stream_cut_count=
             return TURN_ESC
         return TURN_TOOL
 
-    calls = parse_text_calls(text)  # text-fallback path
+    calls = text_calls or parse_text_calls(text)  # text-fallback path
     if calls:
-        messages.append({"role": "assistant", "content": text})
+        messages.append({"role": "assistant", "content": text or reasoning_text or full_response_text})
         obs = []
         esc_action = None
         for n, a in calls:

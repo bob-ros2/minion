@@ -166,3 +166,39 @@ def test_open_stream_only_sets_sampler_params_for_recovery():
             m.RECOVERY_TEMPERATURE,
             m.RECOVERY_TOP_P,
         ) = saved
+
+
+def test_open_stream_default_sampling_params():
+    m = reload_minion(env={
+        "MINION_TEMPERATURE": "0.3",
+        "MINION_TOP_P": "0.9",
+        "MINION_FREQUENCY_PENALTY": "0.5",
+        "MINION_PRESENCE_PENALTY": "0.2",
+    })
+    saved = (m.client, m._log_event, m._llog)
+    calls = []
+
+    class Resp:
+        def __iter__(self):
+            return iter(())
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        return Resp()
+
+    try:
+        m._log_event = lambda *_: None
+        m._llog = None
+        m.client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(
+                completions=types.SimpleNamespace(create=create)))
+
+        m.open_stream([{"role": "user", "content": "hello"}])
+
+        assert calls[0]["temperature"] == 0.3
+        assert calls[0]["top_p"] == 0.9
+        assert calls[0]["frequency_penalty"] == 0.5
+        assert calls[0]["presence_penalty"] == 0.2
+    finally:
+        (m.client, m._log_event, m._llog) = saved
+

@@ -960,3 +960,13 @@ you want to keep working without `/reset`.
 - Add container-internal `chat_minion.sh` to pause cronjob and resume latest interactive chat session
 - Compact evolution limbus rules to minimize token usage and steer focus
 - Update code reviewer skill with AST-based bare except detection
+- Non-root user isolation & PUID/PGID container user configuration (default UID/GID 1000)
+- Robust self-evolution fallback: pre-flight API reachability check & pre-run `git stash create` snapshotting
+- Safe crash auto-rollback: restores workspace strictly to pre-run snapshot without affecting host edits
+- Dynamic `MINION_HOME` environment path resolution across shell scripts and Python helpers
+- Added Docker & Evolution Cronjob Setup documentation to `README.md`
+- Add configurable API default sampling parameters (`MINION_TEMPERATURE`, `MINION_TOP_P`, `MINION_FREQUENCY_PENALTY`, `MINION_PRESENCE_PENALTY`)
+- Tighten default `MINION_MAX_TOKENS` (3000) and `MINION_REASONING_ONLY_CHARS` (12000) to prevent model verbosity and hallucination loops
+- Add generation limit configuration examples in `docker-compose.yaml` and `.env`
+- Add unit test coverage for default streaming sampling parameters in `tests/test_approval_env.py`
+

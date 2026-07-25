@@ -4,7 +4,8 @@
 
 set -euo pipefail
 
-SESSIONS_DIR="/root/.minion/sessions"
+MINION_HOME="${MINION_HOME:-/home/minion/.minion}"
+SESSIONS_DIR="$MINION_HOME/sessions"
 CRON_BACKUP="/tmp/crontab.txt"
 
 # Guard: Ensure we are running inside the container
@@ -32,15 +33,24 @@ trap cleanup EXIT INT TERM
 echo "⏸️  Pausing evolution cronjob (clearing crontab)..."
 crontab -r || true
 
+# Helper function to run python commands as minion user if PUID != 0
+run_as_user() {
+    if [ "$(id -u)" -eq 0 ] && [ "${PUID:-1000}" -ne 0 ]; then
+        gosu minion "$@"
+    else
+        "$@"
+    fi
+}
+
 # Prepare the latest session by injecting the latest evolution cronjob context
 echo "🔄 Preparing session context with latest evolution status..."
-LATEST_SESSION=$(python3 /app/prepare_chat_session.py 2>/dev/null || true)
+LATEST_SESSION=$(run_as_user python3 /app/prepare_chat_session.py 2>/dev/null || true)
 
 if [ -z "$LATEST_SESSION" ]; then
     echo "⚠️  Failed to prepare/resume session. Starting a fresh session..."
-    python3 /app/minion.py
+    run_as_user python3 /app/minion.py
 else
     echo "💬 Resuming session: $LATEST_SESSION"
     echo "--------------------------------------------------"
-    python3 /app/minion.py --resume "$LATEST_SESSION"
+    run_as_user python3 /app/minion.py --resume "$LATEST_SESSION"
 fi

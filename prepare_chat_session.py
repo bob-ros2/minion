@@ -6,12 +6,13 @@ import json
 import time
 import secrets
 
-SESSIONS_DIR = "/root/.minion/sessions"
+MINION_HOME = os.getenv("MINION_HOME", "/home/minion/.minion")
+SESSIONS_DIR = os.path.join(MINION_HOME, "sessions")
 LIMBUS_PATHS = [
-    "/root/.minion/evolve/limbus.md",
-    "/root/.minion/limbus.md"
+    os.path.join(MINION_HOME, "evolve/limbus.md"),
+    os.path.join(MINION_HOME, "limbus.md")
 ]
-RESULT_PATH = "/root/.minion/evolve/result.txt"
+RESULT_PATH = os.path.join(MINION_HOME, "evolve/result.txt")
 
 def clean_ansi_and_progress(raw_text):
     # Remove null bytes

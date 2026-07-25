@@ -47,6 +47,33 @@ def test_legacy_tool_call_tag_still_parses():
     ]
 
 
+def test_xml_qwen_tool_call_parses():
+    content = """
+Now let me try the search again.
+
+<tool_call>
+<function=execute_skill_script>
+<parameter=skill_name>
+web_researcher
+</parameter>
+<parameter=script_path>
+scripts/search.py
+</parameter>
+<parameter=args>
+["--query", "latest ai news drama 2025", "-n", "10"]
+</parameter>
+</function>
+</tool_call>
+"""
+    parsed = m.parse_text_calls(content)
+    assert len(parsed) == 1
+    name, args = parsed[0]
+    assert name == "execute_skill_script"
+    assert args["skill_name"] == "web_researcher"
+    assert args["script_path"] == "scripts/search.py"
+    assert args["args"] == ["--query", "latest ai news drama 2025", "-n", "10"]
+
+
 def test_tool_call_inside_code_block_is_plain_text():
     content = '''I found the system prompt:
 ```python
@@ -59,13 +86,15 @@ SYSTEM = """If your runtime does NOT support native tool calls, emit:
     assert m.parse_text_calls(content) == []
 
 
-def test_tool_call_with_surrounding_prose_is_plain_text():
+def test_tool_call_with_surrounding_prose_parses_when_outside_code():
     content = (
-        'Here is the literal protocol string: '
+        'Here is my thought process... Now running tool: '
         '[minion_tool_call]{"name": "read_file", "arguments": {"path": "foo.py"}}[/minion_tool_call]'
     )
 
-    assert m.parse_text_calls(content) == []
+    assert m.parse_text_calls(content) == [
+        ("read_file", {"path": "foo.py"})
+    ]
 
 
 def test_tool_result_sanitizer_escapes_legacy_tool_tags():
@@ -98,6 +127,43 @@ def test_tool_result_sanitizer_escapes_minion_tool_tags():
     assert "&#91;/minion_tool_call&#93;" in safe
 
 
+def test_model_turn_recovers_xml_from_reasoning_stream(monkeypatch):
+    class ChunkChoiceDelta:
+        def __init__(self, rc):
+            self.reasoning_content = rc
+            self.content = None
+            self.tool_calls = None
+
+    class ChunkChoice:
+        def __init__(self, rc):
+            self.finish_reason = "stop"
+            self.delta = ChunkChoiceDelta(rc)
+
+    class MockChunk:
+        def __init__(self, rc):
+            self.usage = None
+            self.choices = [ChunkChoice(rc)]
+
+    xml_payload = """Let me search for news...
+<tool_call>
+<function=read_file>
+<parameter=path>test.txt</parameter>
+</function>
+</tool_call>"""
+
+    chunks = [MockChunk(xml_payload)]
+    monkeypatch.setattr(m, "open_stream", lambda *args, **kwargs: chunks)
+    monkeypatch.setattr(m, "run_tool", lambda name, args: "file content here")
+
+    messages = [{"role": "user", "content": "read test.txt"}]
+    status = m.model_turn(messages)
+    assert status == m.TURN_TOOL
+    assert messages[-1]["role"] == "user"
+    assert "Observation (read_file): file content here" in messages[-1]["content"]
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-v"]))
+
+

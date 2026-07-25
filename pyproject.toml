@@ -27,7 +27,7 @@ test = [
 minion = "minion:main"
 
 [tool.setuptools]
-py-modules = ["minion"]
+py-modules = ["minion", "prepare_chat_session"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

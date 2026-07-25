@@ -490,3 +490,81 @@ minion was developed using the following models:
 ## License
 
 MIT License. See [`LICENSE`](LICENSE).
+
+## Docker & Evolution Cronjob Setup
+
+Minion supports autonomous self-evolution via an internal container cronjob, allowing the agent to continuously analyze, refine, and improve its codebase on a schedule.
+
+### User Execution Modes (Root vs Non-Root)
+
+The container can run either under a dedicated unprivileged user or as root, controlled via environment variables (`PUID` / `PGID`):
+
+- **Dedicated User (Default, Recommended)**:
+  Set `PUID=1000` and `PGID=1000` in `docker-compose.yaml` (or match your host user's UID/GID). The entrypoint dynamically configures the container user `minion` and executes all agent tasks under unprivileged permissions.
+- **Root Mode**:
+  Set `PUID=0` (and `PGID=0`) to run processes inside the container directly as `root`.
+
+### How to Start the Container
+
+#### 1. Standard Startup (via Docker Compose)
+
+Using the default values set in `docker-compose.yaml` (`PUID=1000`, `PGID=1000`):
+
+```bash
+docker compose up -d
+```
+
+#### 2. Overriding Permissions via Command Line (Root vs User 0)
+
+You do **not** need to edit `docker-compose.yaml` to switch user permissions. You can override `PUID` and `PGID` directly on the command line when starting the container:
+
+```bash
+# Start as root (User 0)
+PUID=0 PGID=0 docker compose up -d
+
+# Start with host user UID/GID dynamically
+PUID=$(id -u) PGID=$(id -g) docker compose up -d
+```
+
+#### 3. Plain Docker Run Commands
+
+If running without `docker compose`:
+
+```bash
+# Standard user (UID/GID 1000)
+docker run -d \
+  --name minion \
+  -e PUID=1000 \
+  -e PGID=1000 \
+  -v $(pwd):/app \
+  -v ~/.minion:/home/minion/.minion \
+  ghcr.io/bob-ros2/bob-minion:latest
+
+# Root mode (User 0)
+docker run -d \
+  --name minion \
+  -e PUID=0 \
+  -e PGID=0 \
+  -v $(pwd):/app \
+  -v ~/.minion:/root/.minion \
+  ghcr.io/bob-ros2/bob-minion:latest
+```
+
+#### 4. Launching Interactive Chat
+
+To attach to the running container for an interactive session (which pauses background evolution cron and injects context):
+
+```bash
+docker exec -it minion /app/chat_minion.sh
+```
+
+### Relevant Scripts
+
+- **`entrypoint.sh`**: Initializes container permissions, synchronizes user/group IDs according to `PUID`/`PGID`, exports environment variables to `/tmp/cron_env`, registers the crontab schedule, and launches `cron` as PID 1.
+- **`evolve.sh`**: Called periodically by cron to run a self-evolution pass (`python3 minion.py --prompt-file ... --yolo`). Includes key safety guards:
+  - **API Reachability Check**: Verifies `$MINION_BASE_URL` availability via `curl` prior to running, skipping gracefully on temporary model server outages without marking evolution as failed.
+  - **Pre-Run Workspace Snapshotting**: Uses `git stash create` to capture an exact snapshot of the working tree prior to execution without altering local host files.
+  - **Code Crash & Rollback**: If an evolution pass causes a Python runtime or syntax exception (`SyntaxError`, `ImportError`, etc.), workspace state is automatically restored to the pre-run snapshot, leaving untracked host files intact.
+- **`chat_minion.sh`**: Script executed via `docker exec -it minion /app/chat_minion.sh`. Temporarily pauses the background evolution cronjob as root, then launches the interactive chat session under the unprivileged `minion` user (via `gosu`) if `PUID != 0`, restoring cron on exit.
+- **`prepare_chat_session.py`**: Invoked before interactive chat sessions to read the latest self-evolution result (`result.txt`) and philosophy (`limbus.md`), injecting them into session context so the agent retains full self-awareness.
+
