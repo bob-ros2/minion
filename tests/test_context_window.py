@@ -275,21 +275,25 @@ def test_switch_source_invalidates_cached_window():
 @pytest.mark.sources
 @pytest.mark.unit
 def test_ctx_field_colorization_by_utilization():
+    # Ensure ANSI colors are enabled (NO_COLOR=1 makes all codes "")
+    orig_no_color = os.environ.pop("NO_COLOR", None)
     orig_urlopen = urllib.request.urlopen
-    _ANSI = re.compile(r"\x1b\[[0-9;]*m")
-
-    def _plain(s):
-        return _ANSI.sub("", s)
-
-    page = _FakeModelsPage([_FakeModel(m.MODEL or "x", {"meta": {"n_ctx": 170000}})])
-    src = _make_source(models_page=page, chat=_FakeChat(_FakeChatCompletions()))
-    src._context_window = None
-
-    _real_active = m.ACTIVE
-    m.ACTIVE = src
-    src.resolve_context_window()
-
+    import importlib
+    importlib.reload(m)
     try:
+        _ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+        def _plain(s):
+            return _ANSI.sub("", s)
+
+        page = _FakeModelsPage([_FakeModel(m.MODEL or "x", {"meta": {"n_ctx": 170000}})])
+        src = _make_source(models_page=page, chat=_FakeChat(_FakeChatCompletions()))
+        src._context_window = None
+
+        _real_active = m.ACTIVE
+        m.ACTIVE = src
+        src.resolve_context_window()
+
         # Green: under 30% of 170000 (= 51000). Use 667.
         f = m._ctx_field(667)
         assert m.GREEN in f, "under 30% should be green"
@@ -323,6 +327,13 @@ def test_ctx_field_colorization_by_utilization():
     finally:
         m.ACTIVE = _real_active
         urllib.request.urlopen = orig_urlopen
+        # Restore NO_COLOR to its original state
+        if orig_no_color is not None:
+            os.environ["NO_COLOR"] = orig_no_color
+        else:
+            os.environ.pop("NO_COLOR", None)
+        # Reload to restore original ANSI state for other tests
+        importlib.reload(m)
 
 
 if __name__ == "__main__":

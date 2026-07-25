@@ -1038,6 +1038,13 @@ for _i, _arg in enumerate(sys.argv):
         _PRELUDE_FILE = sys.argv[_i + 1]
         break
 
+# --- --result-file: target path to save clean result text ------------------
+_RESULT_FILE = os.environ.get("EVOLVE_RESULT_FILE")
+for _i, _arg in enumerate(sys.argv):
+    if _arg in ("--result-file", "-o") and _i + 1 < len(sys.argv):
+        _RESULT_FILE = sys.argv[_i + 1]
+        break
+
 # --- base-level traffic log -------------------------------------------------
 # Append-only JSONL record of every byte we ship to / receive from the server.
 # Lives next to this script so it's easy to find; rotate by hand if it gets big.
@@ -1051,13 +1058,20 @@ def _log_event(direction, payload):
     _llog.write(json.dumps({"ts": time.time(), "dir": direction, "data": payload}) + "\n")
 
 # --- ANSI -------------------------------------------------------------------
-DIM, CYAN, GREEN, YELLOW, RED, MAGENTA, BOLD, RESET = (
-    "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m",
-    "\033[1m", "\033[0m",
-)
-CLEAR_LINE = "\033[2K\r"   # erase entire line, return cursor to col 0
-HIDE_CURSOR = "\033[?25l"
-SHOW_CURSOR = "\033[?25h"
+_NO_COLOR = bool(os.environ.get("NO_COLOR"))
+if _NO_COLOR:
+    DIM = CYAN = GREEN = YELLOW = RED = MAGENTA = BOLD = RESET = ""
+    CLEAR_LINE = ""
+    HIDE_CURSOR = ""
+    SHOW_CURSOR = ""
+else:
+    DIM, CYAN, GREEN, YELLOW, RED, MAGENTA, BOLD, RESET = (
+        "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m",
+        "\033[1m", "\033[0m",
+    )
+    CLEAR_LINE = "\033[2K\r"   # erase entire line, return cursor to col 0
+    HIDE_CURSOR = "\033[?25l"
+    SHOW_CURSOR = "\033[?25h"
 
 
 # --- waiting animation (tiny Conway's Game of Life) -------------------------
@@ -3494,6 +3508,28 @@ def _run_one_shot():
     except Exception as e:
         sys.stderr.write(f"\n[minion] error: {type(e).__name__}: {e}\n")
         sys.exit(1)
+
+    # Save evolution session history
+    sid = _new_session_id()
+    title = f"Self-Evolution: {instruction[:40]}".strip()
+    _write_session(sid, messages, meta={"title": title, "source": ACTIVE.name if ACTIVE else "local"})
+
+    # Write clean assistant output to result file if specified
+    if _RESULT_FILE:
+        assistant_contents = [
+            m.get("content", "") for m in messages
+            if m.get("role") == "assistant" and m.get("content")
+        ]
+        clean_result = "\n\n".join(assistant_contents).strip()
+        try:
+            res_dir = os.path.dirname(os.path.abspath(_RESULT_FILE))
+            if res_dir:
+                os.makedirs(res_dir, exist_ok=True)
+            with open(_RESULT_FILE, "w", encoding="utf-8") as f:
+                f.write(clean_result + "\n")
+        except OSError as e:
+            sys.stderr.write(f"minion: cannot write --result-file {_RESULT_FILE!r}: {e}\n")
+
     sys.exit(0)
 
 

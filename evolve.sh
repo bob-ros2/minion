@@ -160,13 +160,35 @@ fi
 echo "[evolve] running minion one-shot..."
 ERROR_LOG="$EVOLVE_DIR/error.log"
 
+export NO_COLOR=1
+
 set +e
-python3 "$MINION_PY" --prompt-file "$PROMPT_FILE" --yolo $LIMBUS_ARGS \
+python3 "$MINION_PY" --prompt-file "$PROMPT_FILE" --result-file "$RESULT_FILE" --yolo $LIMBUS_ARGS \
     > /tmp/minion_evolve_out.tmp 2>"$ERROR_LOG"
 EXIT_CODE=$?
 set -e
 
-head -c 200000 /tmp/minion_evolve_out.tmp > "$RESULT_FILE"
+# If result file was not created by minion.py (e.g. crash), fallback to cleaned stdout output
+if [ ! -s "$RESULT_FILE" ] && [ -f /tmp/minion_evolve_out.tmp ]; then
+    python3 -c "
+import sys, re
+try:
+    text = open('/tmp/minion_evolve_out.tmp', encoding='utf-8', errors='ignore').read()
+    text = re.sub(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', text)
+    text = re.sub(r'\x1b\[[0-9;?]*[a-zA-Z]', '', text)
+    lines = []
+    for line in text.splitlines():
+        l = line.strip()
+        if re.match(r'^[┌│└─\s]*$', l) or l.startswith('└') or l.startswith('┌') or 'tok/s' in l:
+            continue
+        lines.append(line)
+    cleaned = '\n'.join(lines).strip()
+    with open('$RESULT_FILE', 'w', encoding='utf-8') as f:
+        f.write(cleaned + '\n')
+except Exception:
+    pass
+" 2>/dev/null || head -c 200000 /tmp/minion_evolve_out.tmp > "$RESULT_FILE"
+fi
 rm -f /tmp/minion_evolve_out.tmp
 
 if [ "$EXIT_CODE" -ne 0 ]; then

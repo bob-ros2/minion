@@ -969,4 +969,6 @@ you want to keep working without `/reset`.
 - Tighten default `MINION_MAX_TOKENS` (3000) and `MINION_REASONING_ONLY_CHARS` (12000) to prevent model verbosity and hallucination loops
 - Add generation limit configuration examples in `docker-compose.yaml` and `.env`
 - Add unit test coverage for default streaming sampling parameters in `tests/test_approval_env.py`
+- Fix terminal formatting noise in evolution results: add `--result-file` / `-o` option to `minion.py` for clean one-shot output saving, support `NO_COLOR` env var, update `evolve.sh` and improve ANSI/TUI stripping in `prepare_chat_session.py`
+
 

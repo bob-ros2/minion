@@ -18,10 +18,11 @@ def clean_ansi_and_progress(raw_text):
     # Remove null bytes
     text = raw_text.replace('\x00', '')
     
-    # Remove ANSI escape sequences
-    text = re.sub(r'\x1b\[[0-9;]*[a-zA-Z]', '', text)
+    # Remove ANSI escape sequences (both CSI and generic ESC sequences)
+    text = re.sub(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', text)
+    text = re.sub(r'\x1b\[[0-9;?]*[a-zA-Z]', '', text)
     
-    # Process carriage returns and skip progress lines
+    # Process carriage returns and skip progress/box lines
     lines = []
     for line in text.split('\n'):
         parts = line.split('\r')
@@ -29,16 +30,25 @@ def clean_ansi_and_progress(raw_text):
         if visible_part:
             # Collapse multiple spaces
             visible_part = re.sub(r'[ \t]+', ' ', visible_part)
-            # Skip common progress/spinner/tool indicators
+            # Skip pure box borders/separators
+            if re.match(r'^[┌│└─\s]+$', visible_part):
+                continue
+            # Skip common progress/spinner/tool indicators & CLI frames
             ls = visible_part.lower()
             if (visible_part.startswith('↳') or 
                 visible_part.startswith('✔') or 
                 visible_part.startswith('──') or 
+                visible_part.startswith('┌─') or
+                visible_part.startswith('└─') or
+                visible_part.startswith('│') or
                 'generating tool call' in ls or 
                 'running command' in ls or 
                 'running:' in ls or
                 'forcing final answer' in ls or
-                'thinking · esc to interrupt' in ls):
+                'thinking · esc to interrupt' in ls or
+                'tok/s' in ls or
+                'tok ·' in ls or
+                'ttft' in ls):
                 continue
             lines.append(visible_part)
             

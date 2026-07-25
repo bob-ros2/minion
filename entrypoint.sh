@@ -70,7 +70,7 @@ fi
 ENV_FILE="/tmp/cron_env"
 export -p | grep -E '^(declare -x )?(MINION_|EVOLVE_|LIMBUS_|WORKSPACE|PATH|HOME|PUID|PGID)' | sed 's/^declare -x /export /' | sort > "$ENV_FILE"
 echo "export SHELL=/bin/bash" >> "$ENV_FILE"
-echo "export PATH=/usr/local/bin:/usr/bin:/bin:/app" >> "$ENV_FILE"
+echo "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/app" >> "$ENV_FILE"
 echo "export MINION_HOME=${MINION_HOME}" >> "$ENV_FILE"
 echo "export HOME=${MINION_HOME%/.*}" >> "$ENV_FILE"
 chmod 644 "$ENV_FILE"
