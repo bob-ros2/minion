@@ -565,6 +565,8 @@ docker exec -it minion /app/chat_minion.sh
   - **API Reachability Check**: Verifies `$MINION_BASE_URL` availability via `curl` prior to running, skipping gracefully on temporary model server outages without marking evolution as failed.
   - **Pre-Run Workspace Snapshotting**: Uses `git stash create` to capture an exact snapshot of the working tree prior to execution without altering local host files.
   - **Code Crash & Rollback**: If an evolution pass causes a Python runtime or syntax exception (`SyntaxError`, `ImportError`, etc.), workspace state is automatically restored to the pre-run snapshot, leaving untracked host files intact.
+  - **Evolution History Log**: Appends a structured summary of each run (timestamp, session ID, causing prompt/context, and result summary) to `history.txt` (configurable via `EVOLVE_HISTORY_FILE` / `--history-file`) so you can trace evolution history over time.
 - **`chat_minion.sh`**: Script executed via `docker exec -it minion /app/chat_minion.sh`. Temporarily pauses the background evolution cronjob as root, then launches the interactive chat session under the unprivileged `minion` user (via `gosu`) if `PUID != 0`, restoring cron on exit.
 - **`prepare_chat_session.py`**: Invoked before interactive chat sessions to read the latest self-evolution result (`result.txt`) and philosophy (`limbus.md`), injecting them into session context so the agent retains full self-awareness.
+
 

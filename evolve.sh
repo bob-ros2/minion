@@ -20,15 +20,17 @@ EVOLVE_DIR="${EVOLVE_DIR:-$MINION_HOME/evolve}"
 LOCK_FILE="${EVOLVE_LOCK_FILE:-$EVOLVE_DIR/lock}"
 PROMPT_FILE="${EVOLVE_PROMPT_FILE:-$EVOLVE_DIR/prompt.txt}"
 RESULT_FILE="${EVOLVE_RESULT_FILE:-$EVOLVE_DIR/result.txt}"
+HISTORY_FILE="${EVOLVE_HISTORY_FILE:-$EVOLVE_DIR/history.txt}"
 MINION_PY="${MINION_PY:-/app/minion.py}"
 WORKSPACE="${WORKSPACE:-/app}"
 
 mkdir -p "$EVOLVE_DIR"
 
 # --- Lock handling ---
+LOCK_MAX_AGE="${EVOLVE_LOCK_MAX_AGE:-3600}"  # 1 hour
 if [ -f "$LOCK_FILE" ]; then
     lock_age=$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || echo 0)))
-    if [ "$lock_age" -gt 21600 ]; then  # 6 hours
+    if [ "$lock_age" -gt "$LOCK_MAX_AGE" ]; then
         echo "[evolve] stale lock (${lock_age}s old) — removing"
         rm -f "$LOCK_FILE"
     else
@@ -163,7 +165,7 @@ ERROR_LOG="$EVOLVE_DIR/error.log"
 export NO_COLOR=1
 
 set +e
-python3 "$MINION_PY" --prompt-file "$PROMPT_FILE" --result-file "$RESULT_FILE" --yolo $LIMBUS_ARGS \
+python3 "$MINION_PY" --prompt-file "$PROMPT_FILE" --result-file "$RESULT_FILE" --history-file "$HISTORY_FILE" --yolo $LIMBUS_ARGS \
     > /tmp/minion_evolve_out.tmp 2>"$ERROR_LOG"
 EXIT_CODE=$?
 set -e
@@ -201,6 +203,24 @@ if [ "$EXIT_CODE" -ne 0 ]; then
         echo -e "\n\n### [EVOLVE ROLLBACK TRIGGERED]\nThe self-evolution caused a python code crash and was automatically restored to the pre-run snapshot." >> "$RESULT_FILE"
     else
         echo "[evolve] ⚠️ Execution returned exit code $EXIT_CODE (code integrity verified)."
+    fi
+
+    # Append failed/rolled back result to history.txt
+    if [ -f "$RESULT_FILE" ]; then
+        TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
+        SESSION_TAG="${NEWEST_SESSION:+$(basename "$NEWEST_SESSION")}"
+        SESSION_TAG="${SESSION_TAG:-failed-run}"
+        PROMPT_SUMMARY="${LAST_RESULT:+Session Source: $(basename "$NEWEST_SESSION")}"
+        PROMPT_SUMMARY="${PROMPT_SUMMARY:-Failed evolution run}"
+        
+        {
+            echo "--- [$TIMESTAMP] Session: $SESSION_TAG (FAILED) ---"
+            echo "Prompt: $PROMPT_SUMMARY"
+            echo "Result:"
+            cat "$RESULT_FILE"
+            echo ""
+            echo ""
+        } >> "$HISTORY_FILE" || true
     fi
 fi
 

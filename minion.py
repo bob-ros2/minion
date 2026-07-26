@@ -1045,17 +1045,113 @@ for _i, _arg in enumerate(sys.argv):
         _RESULT_FILE = sys.argv[_i + 1]
         break
 
+_HISTORY_FILE = os.environ.get("EVOLVE_HISTORY_FILE")
+for _i, _arg in enumerate(sys.argv):
+    if _arg in ("--history-file", "-H") and _i + 1 < len(sys.argv):
+        _HISTORY_FILE = sys.argv[_i + 1]
+        break
+
+if not _HISTORY_FILE and _RESULT_FILE:
+    _HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(_RESULT_FILE)), "history.txt")
+
+
+def _summarize_prompt(prompt_text, maxlen=150):
+    """Summarize prompt text for history logging."""
+    if not prompt_text:
+        return "(empty prompt)"
+    lines = [l.strip() for l in prompt_text.splitlines() if l.strip()]
+    session_src = None
+    for l in lines:
+        if "Session Source:" in l:
+            session_src = l
+            break
+    if session_src:
+        return session_src.lstrip("#").strip()
+
+    meaningful = []
+    for l in lines:
+        if l.startswith("#"):
+            l = l.lstrip("#").strip()
+        if l and not l.startswith("You are a self-aware") and not l.startswith("Your purpose is"):
+            meaningful.append(l)
+        if len(" ".join(meaningful)) >= maxlen:
+            break
+    summary = " ".join(meaningful) if meaningful else lines[0]
+    if len(summary) > maxlen:
+        summary = summary[:maxlen - 1] + "…"
+    return summary
+
+
+def _append_history_entry(history_file, session_id, prompt_text, result_text):
+    """Append a structured entry to history.txt for tracking evolution runs."""
+    if not history_file:
+        return
+    try:
+        hist_dir = os.path.dirname(os.path.abspath(history_file))
+        if hist_dir:
+            os.makedirs(hist_dir, exist_ok=True)
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        short_sid = _short_id(session_id)
+        prompt_summary = _summarize_prompt(prompt_text)
+
+        entry_header = f"--- [{timestamp}] Session: {session_id} ({short_sid}) ---"
+        entry_prompt = f"Prompt: {prompt_summary}"
+
+        content = f"{entry_header}\n{entry_prompt}\nResult:\n{result_text.strip()}\n\n"
+
+        with open(history_file, "a", encoding="utf-8") as f:
+            f.write(content)
+    except OSError as e:
+        sys.stderr.write(f"minion: cannot write --history-file {history_file!r}: {e}\n")
+
 # --- base-level traffic log -------------------------------------------------
-# Append-only JSONL record of every byte we ship to / receive from the server.
-# Lives next to this script so it's easy to find; rotate by hand if it gets big.
+# Append-only JSONL record of API requests & streamed SSE chunks.
+# Lives under logs/llamacpp.log. Controlled by MINION_LOG_API (default 1)
+# and capped at MINION_MAX_LOG_MB (default 5 MB).
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "llamacpp.log")
-os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-_llog = open(LOG_PATH, "a", buffering=1)  # line-buffered; flushes per write
+_LOG_API_ENV = os.environ.get("MINION_LOG_API", "1").lower().strip()
+_LOG_API_ENABLED = _LOG_API_ENV not in ("0", "false", "off", "no")
+try:
+    _MAX_LOG_BYTES = int(os.environ.get("MINION_MAX_LOG_MB", "5")) * 1024 * 1024
+except (ValueError, TypeError):
+    _MAX_LOG_BYTES = 5 * 1024 * 1024
+
+_llog = None
+
+
+def _get_log_file():
+    global _llog
+    if not _LOG_API_ENABLED:
+        return None
+    if _llog is None or _llog.closed:
+        try:
+            os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+            if os.path.exists(LOG_PATH) and _MAX_LOG_BYTES > 0:
+                if os.path.getsize(LOG_PATH) > _MAX_LOG_BYTES:
+                    with open(LOG_PATH, "w", encoding="utf-8") as f_trunc:
+                        f_trunc.write("")
+            _llog = open(LOG_PATH, "a", buffering=1)
+        except OSError:
+            _llog = None
+    return _llog
 
 
 def _log_event(direction, payload):
     """direction: 'req' (outgoing) or 'resp' (incoming SSE chunk)."""
-    _llog.write(json.dumps({"ts": time.time(), "dir": direction, "data": payload}) + "\n")
+    if not _LOG_API_ENABLED:
+        return
+    f = _get_log_file()
+    if f is not None:
+        try:
+            if _MAX_LOG_BYTES > 0 and f.tell() > _MAX_LOG_BYTES:
+                f.close()
+                with open(LOG_PATH, "w", encoding="utf-8") as f_trunc:
+                    f_trunc.write("")
+                _llog = open(LOG_PATH, "a", buffering=1)
+                f = _llog
+            f.write(json.dumps({"ts": time.time(), "dir": direction, "data": payload}) + "\n")
+        except Exception:
+            pass
 
 # --- ANSI -------------------------------------------------------------------
 _NO_COLOR = bool(os.environ.get("NO_COLOR"))
@@ -2355,7 +2451,7 @@ def open_stream(messages, tools=TOOLS, tool_choice=None, max_tokens=None,
                 model=MODEL, messages=messages, stream=True,
                 stream_options={"include_usage": True}, **fallback_opts)
         # Wrap the stream so every chunk is captured to the log on its way out.
-        return _LoggingStream(stream, _llog)
+        return _LoggingStream(stream)
     except (APIConnectionError, httpx.HTTPError):
         print(f"{RED}  ✗ can't reach {client.base_url} — is the server up? "
               f"Set MINION_BASE_URL (and MINION_MODEL) to point at it.{RESET}")
@@ -2530,15 +2626,13 @@ def _maybe_autocompress(messages, prompt_tokens):
 class _LoggingStream:
     """Iterator wrapper that tees each SSE chunk to llamacpp.log before yielding.
     Uses model_dump so we capture the chunk's full structure (incl. reasoning_content)."""
-    def __init__(self, inner, log_file):
+    def __init__(self, inner):
         self._inner = inner
-        self._log = log_file
 
     def __iter__(self):
         for chunk in self._inner:
             try:
-                self._log.write(json.dumps({"ts": time.time(), "dir": "resp",
-                                             "data": chunk.model_dump()}) + "\n")
+                _log_event("resp", chunk.model_dump())
             except Exception:
                 pass  # never let logging break the stream
             yield chunk
@@ -3515,13 +3609,9 @@ def _run_one_shot():
     _write_session(sid, messages, meta={"title": title, "source": ACTIVE.name if ACTIVE else "local"})
 
     # Write clean assistant output to result file if specified
+    clean_result = None
     if _RESULT_FILE:
-        assistant_contents = [
-            m.get("content", "") for m in messages
-            if m.get("role") == "assistant" and m.get("content")
-            and m.get("content") != "I have read and understood the Limbus. I am ready for the task."
-        ]
-        clean_result = "\n\n".join(assistant_contents).strip()
+        clean_result = _build_clean_result(messages)
         try:
             res_dir = os.path.dirname(os.path.abspath(_RESULT_FILE))
             if res_dir:
@@ -3531,7 +3621,38 @@ def _run_one_shot():
         except OSError as e:
             sys.stderr.write(f"minion: cannot write --result-file {_RESULT_FILE!r}: {e}\n")
 
+    if _HISTORY_FILE:
+        if clean_result is None:
+            clean_result = _build_clean_result(messages)
+        _append_history_entry(_HISTORY_FILE, sid, instruction, clean_result)
+
     sys.exit(0)
+
+
+def _build_clean_result(messages):
+    """Extract clean assistant output for --result-file from message history."""
+    if not isinstance(messages, list):
+        return ""
+
+    valid_msgs = [
+        m for m in messages
+        if m.get("role") == "assistant" and m.get("content")
+        and m.get("content").strip() != "I have read and understood the Limbus. I am ready for the task."
+    ]
+    if not valid_msgs:
+        return ""
+
+    # Prefer assistant responses that did NOT issue tool calls (final answers)
+    final_responses = [
+        m.get("content").strip() for m in valid_msgs
+        if not m.get("tool_calls")
+    ]
+    if final_responses:
+        return "\n\n".join(final_responses).strip()
+
+    # Fallback: if all assistant messages had tool_calls, return all non-empty content
+    all_contents = [m.get("content").strip() for m in valid_msgs if m.get("content")]
+    return "\n\n".join(all_contents).strip()
 
 
 def main():

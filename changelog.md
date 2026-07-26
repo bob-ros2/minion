@@ -970,5 +970,7 @@ you want to keep working without `/reset`.
 - Add generation limit configuration examples in `docker-compose.yaml` and `.env`
 - Add unit test coverage for default streaming sampling parameters in `tests/test_approval_env.py`
 - Fix terminal formatting noise in evolution results: add `--result-file` / `-o` option to `minion.py` for clean one-shot output saving, support `NO_COLOR` env var, update `evolve.sh` and improve ANSI/TUI stripping in `prepare_chat_session.py`
+- Add evolution history log (`history.txt`): parse `--history-file` / `-H` & `EVOLVE_HISTORY_FILE` in `minion.py`, configure `HISTORY_FILE` in `evolve.sh`, and log structured evolution history (timestamp, session ID/short tag, prompt summary, result/NEXT_STEP) including failure rollbacks
+
 
 
